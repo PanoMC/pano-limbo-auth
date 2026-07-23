@@ -1,25 +1,98 @@
-<img src="https://elytrium.net/src/img/elytrium.webp" alt="Elytrium" align="right">
+# Pano LimboAuth
 
-# LimboAuth
+> **This is a fork of [Elytrium/LimboAuth](https://github.com/Elytrium/LimboAuth).**
+> Original developer and copyright owner: **Elytrium**. Licensed under **AGPL-3.0**, which this fork
+> respects and preserves in full (see [`LICENSE`](LICENSE)). All credit for LimboAuth belongs to
+> Elytrium — this fork only adds an integration API on top; changes are recorded in
+> [`NOTICE.md`](NOTICE.md).
 
-[![Join our Discord](https://img.shields.io/discord/775778822334709780.svg?logo=discord&label=Discord)](https://ely.su/discord)
-![Modrinth Game Versions](https://img.shields.io/modrinth/game-versions/4iChqdl8?logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAAIkAAAA8CAMAAABl%2FWk9AAABAlBMVEUAAAAApcwAqM4Apc4Ap88Apc4Apc4AqM0Aps0Ap84Apc0ApswApc4Aps0Ap80Aps4Ap80Aps0Ap84Aps0Aps4Aps0EqdAHrNMKrtQNsdcRtNoVttwWtt0buuAbuuAbuuAauuAbuuEauuAbu%2BAbuuAbuuEbu%2BAbuuEau%2BAbuuAbuuEau%2BEauuAbuuAbueAbuuAau%2BEbuuAauuAauuAbuuEauuEau%2BAbuuAau%2BEbu%2BAWtt0bvOAau%2BEZuOEYt94cvOEUtt8YudsVsdYAn90A%2F%2F8CqM8Ap84Bp84Aps0Ap80Aps0Aps0Aps0auuAauuAbuuAbuuAauuAauuAbuuAAps0buuCTPBtaAAAAVHRSTlMAIhwzOj5ESk1aZnB3f4iTnKWqrrW7xMDCxdDa3%2BDc2tbMxcC8uLOvp6KflpCHgXl1b15ZVE5EQDovKSQhHRcRDAgFAgHL1Nne5e30%2FPj08e3q5vwu6%2BLEAAADTUlEQVR42sXXhXLDPAzAcY2ZGcrMzAzjYhK9%2F6N8YA8zW62Xwu9gvOp6yt8JTKmSjXnHA18Jlqn63xAj5IbLGqWWi%2FvH%2BJ2jufwh3oUXPYSGMmlYjFLcN0aRkc%2BJzKACi5DUUSzQBMj22aeuNsxfUTaIjS1qBJkozF3XRS9HBrkczFsGJVwd9vMEcqMazFfLhhIF9vO2Hd%2B5T05n4GAVJJIoEQAmhZ%2BujFl4lYxSH6KYXmY%2Fb4y%2BfevBmIVDEIqiRFTw8%2FGrMQMnIFLuo9iwzg%2FCnz%2B%2F7RnW7YFIACWSwASRm%2BGqXLZAoIASthaPHprojwbh7Xh%2Fkr3NtlrUMsC40UwjVuW1DH%2BVlkaty36exd9uDKn9OUStyKPmQBN6VbbgrxIToybSf5rle0JHrV%2F5iJrQ%2FZtsT1bgbyJTRU1lVd6OdoV23kdc2dnoqkRNa3xETebSUNRjNdvrGcaFoCZ%2BFBsVP6ImNXhRHmUVYKVnWiYyarozVgemioRrQ9U2wA775BxMOr%2Bj5gimCk34kELCnaFqDWCdfXJER80eTLIhvokh4dZQwt%2BJ7jm%2FvoRR40PkG3R%2F6ZXtPV5McrbXZqXcOz1aEUdtGONDiNQHKHXPdo97WQPOStSGJeUCcw%2BzSPz3aEXgt2atBVzHO82W9NpgCX8ATpiGKKaCDh37%2FjIwdQ2F9B8HTx0s4Tvg%2Bz5EyKnjuyFvWzevTxH7Q7DEh0yyYx6C0%2BrAxKYJ7PHGyh%2B1AKDUR8bm5UOYefnjX9tN3J9Y1ztpAiSRlgCmNkKz8ZsxO0cAXT%2BS9CIwOSpq1r3wC4NkawATIaJm3TM7i3Uk%2Bbt8VVzyqFl38H5h0FLAVIaSqFn3fNDmDfUgqV8CJiOJGu14pQNTq42QZG8CE5JEjXIKXVCQQ1oQmKZN%2Fa5xU%2FkgpKWBSapHbQPUtF1IGpT5pqhH7QgUVYZIcrZ4U5Sj1ttvgZo00vxN6KZ1ZO6UotZ7NnvYbwMhjLSBxza7qJ0AoelEwqyjVgdCaYAEMmrqykBJ4VRuZpH3DpACOIXB6wwGWQNaw4YT9dOblq21YJJiH0maP1GDxUigzMgdy9VhcTo%2B%2FG3ojqbLsGh1jRhisQp95Ma%2BWK4Gy1T0DLQlDPEv1X2Xr4VYWO8AAAAASUVORK5CYII%3D)
-![Modrinth Downloads](https://img.shields.io/modrinth/dt/4iChqdl8?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxNCIgdmlld0JveD0iMCAwIDUxMiA1MTQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI%2BCiAgPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik01MDMuMTYgMzIzLjU2QzUxNC41NSAyODEuNDcgNTE1LjMyIDIzNS45MSA1MDMuMiAxOTAuNzZDNDY2LjU3IDU0LjIyOTkgMzI2LjA0IC0yNi44MDAxIDE4OS4zMyA5Ljc3OTkxQzgzLjgxMDEgMzguMDE5OSAxMS4zODk5IDEyOC4wNyAwLjY4OTk0MSAyMzAuNDdINDMuOTlDNTQuMjkgMTQ3LjMzIDExMy43NCA3NC43Mjk4IDE5OS43NSA1MS43MDk4QzMwNi4wNSAyMy4yNTk4IDQxNS4xMyA4MC42Njk5IDQ1My4xNyAxODEuMzhMNDExLjAzIDE5Mi42NUMzOTEuNjQgMTQ1LjggMzUyLjU3IDExMS40NSAzMDYuMyA5Ni44MTk4TDI5OC41NiAxNDAuNjZDMzM1LjA5IDE1NC4xMyAzNjQuNzIgMTg0LjUgMzc1LjU2IDIyNC45MUMzOTEuMzYgMjgzLjggMzYxLjk0IDM0NC4xNCAzMDguNTYgMzY5LjE3TDMyMC4wOSA0MTIuMTZDMzkwLjI1IDM4My4yMSA0MzIuNCAzMTAuMyA0MjIuNDMgMjM1LjE0TDQ2NC40MSAyMjMuOTFDNDY4LjkxIDI1Mi42MiA0NjcuMzUgMjgxLjE2IDQ2MC41NSAzMDguMDdMNTAzLjE2IDMyMy41NloiIGZpbGw9IiMxYmQ5NmEiLz4KICA8cGF0aCBkPSJNMzIxLjk5IDUwNC4yMkMxODUuMjcgNTQwLjggNDQuNzUwMSA0NTkuNzcgOC4xMTAxMSAzMjMuMjRDMy44NDAxMSAzMDcuMzEgMS4xNyAyOTEuMzMgMCAyNzUuNDZINDMuMjdDNDQuMzYgMjg3LjM3IDQ2LjQ2OTkgMjk5LjM1IDQ5LjY3OTkgMzExLjI5QzUzLjAzOTkgMzIzLjggNTcuNDUgMzM1Ljc1IDYyLjc5IDM0Ny4wN0wxMDEuMzggMzIzLjkyQzk4LjEyOTkgMzE2LjQyIDk1LjM5IDMwOC42IDkzLjIxIDMwMC40N0M2OS4xNyAyMTAuODcgMTIyLjQxIDExOC43NyAyMTIuMTMgOTQuNzYwMUMyMjkuMTMgOTAuMjEwMSAyNDYuMjMgODguNDQwMSAyNjIuOTMgODkuMTUwMUwyNTUuMTkgMTMzQzI0NC43MyAxMzMuMDUgMjM0LjExIDEzNC40MiAyMjMuNTMgMTM3LjI1QzE1Ny4zMSAxNTQuOTggMTE4LjAxIDIyMi45NSAxMzUuNzUgMjg5LjA5QzEzNi44NSAyOTMuMTYgMTM4LjEzIDI5Ny4xMyAxMzkuNTkgMzAwLjk5TDE4OC45NCAyNzEuMzhMMTc0LjA3IDIzMS45NUwyMjAuNjcgMTg0LjA4TDI3OS41NyAxNzEuMzlMMjk2LjYyIDE5Mi4zOEwyNjkuNDcgMjE5Ljg4TDI0NS43OSAyMjcuMzNMMjI4Ljg3IDI0NC43MkwyMzcuMTYgMjY3Ljc5QzIzNy4xNiAyNjcuNzkgMjUzLjk1IDI4NS42MyAyNTMuOTggMjg1LjY0TDI3Ny43IDI3OS4zM0wyOTQuNTggMjYwLjc5TDMzMS40NCAyNDkuMTJMMzQyLjQyIDI3My44MkwzMDQuMzkgMzIwLjQ1TDI0MC42NiAzNDAuNjNMMjEyLjA4IDMwOC44MUwxNjIuMjYgMzM4LjdDMTg3LjggMzY3Ljc4IDIyNi4yIDM4My45MyAyNjYuMDEgMzgwLjU2TDI3Ny41NCA0MjMuNTVDMjE4LjEzIDQzMS40MSAxNjAuMSA0MDYuODIgMTI0LjA1IDM2MS42NEw4NS42Mzk5IDM4NC42OEMxMzYuMjUgNDUxLjE3IDIyMy44NCA0ODQuMTEgMzA5LjYxIDQ2MS4xNkMzNzEuMzUgNDQ0LjY0IDQxOS40IDQwMi41NiA0NDUuNDIgMzQ5LjM4TDQ4OC4wNiAzNjQuODhDNDU3LjE3IDQzMS4xNiAzOTguMjIgNDgzLjgyIDMyMS45OSA1MDQuMjJaIiBmaWxsPSIjMWJkOTZhIi8%2BCjwvc3ZnPg%3D%3D)
-[![Proxy Stats](https://img.shields.io/bstats/servers/13700?logo=minecraft&label=Servers)](https://bstats.org/plugin/velocity/LimboAuth/13700)
-[![Proxy Stats](https://img.shields.io/bstats/players/13700?logo=minecraft&label=Players)](https://bstats.org/plugin/velocity/LimboAuth/13700)
+LimboAuth is an authentication system built inside a virtual server (Limbo) for Velocity proxies.
+This Pano fork stays a **drop-in replacement** — the plugin id is still `limboauth` — and adds a
+small, public API so external plugins can delegate password verification and manage accounts.
 
-Auth System built in virtual server (Limbo). \
-[Описание и обсуждение на русском языке (spigotmc.ru)](https://spigotmc.ru/resources/limboapi-limboauth-limbofilter-virtualnye-servera-dlja-velocity.715/) \
-[Описание и обсуждение на русском языке (rubukkit.org)](http://rubukkit.org/threads/limboapi-limboauth-limbofilter-virtualnye-servera-dlja-velocity.177904/)
+## Why this fork exists
 
-Test server: [``ely.su``](https://hotmc.ru/minecraft-server-203216)
+Upstream LimboAuth has no supported way to:
+
+- delegate password verification to an **external authority** (for example a website / CMS account
+  system), or
+- **create, update, or remove accounts** from another plugin through a stable public API.
+
+[Pano](https://panocms.com) needs both so a Minecraft server can authenticate players against its
+website accounts — the same way plugins integrate with AuthMe-Reloaded on Spigot. The additions are
+generic and reusable by **any** Velocity plugin, not just Pano.
+
+## What is extended
+
+### `net.elytrium.limboauth.api.ExternalPasswordProvider`
+
+A callback interface you register to take over password checks:
+
+- **`verifyPassword(String lowercaseNickname, String password)`** — return `TRUE` to accept the
+  login, `FALSE` to reject it, or `null` to fall back to LimboAuth's own stored-password check. This
+  lets an external system be the source of truth while still allowing purely local accounts. Note
+  that accounts provisioned as externally managed have no local password, so they are never locally
+  verifiable — the provider must answer `TRUE`/`FALSE` for them (returning `null` would leave them
+  unable to log in).
+
+### New public `LimboAuth` methods
+
+- **`setExternalPasswordProvider(ExternalPasswordProvider provider)`** — register (or clear, with
+  `null`) the external password provider above.
+- **`getExternalPasswordProvider()`** — return the currently registered provider (or `null`).
+- **`isRegistered(String nickname)`** — check whether an account already exists.
+- **`registerPlayer(String nickname, UUID uuid, String ip, String password)`** — create a normal,
+  password-backed account.
+- **`provisionExternalPlayer(String nickname, UUID uuid, String ip)`** — create an account
+  authenticated externally (no local password), for players whose credentials live in the external
+  authority.
+- **`unregisterPlayer(String nickname)`** — delete an account.
+- **`changePlayerPassword(String nickname, String newPassword)`** — set a new password for an
+  existing account.
+
+## How to use
+
+Grab the running LimboAuth plugin instance from Velocity's `PluginManager`, then register your
+provider and/or call the account methods:
+
+```java
+import com.velocitypowered.api.plugin.PluginContainer;
+import net.elytrium.limboauth.LimboAuth;
+import java.util.UUID;
+
+LimboAuth limboAuth = (LimboAuth) proxyServer.getPluginManager()
+    .getPlugin("limboauth")
+    .flatMap(PluginContainer::getInstance)
+    .orElseThrow();
+
+// Delegate password checks to your own authority.
+// verifyPassword(String lowercaseNickname, String password) -> Boolean
+limboAuth.setExternalPasswordProvider((lowercaseNickname, password) -> {
+  if (!myAccountSystem.knows(lowercaseNickname)) {
+    return null;                                              // null = fall back to LimboAuth's local check
+  }
+  return myAccountSystem.verify(lowercaseNickname, password); // TRUE = accept, FALSE = reject
+});
+
+// High-level account management from your plugin.
+UUID uuid = player.getUniqueId();
+String ip = player.getRemoteAddress().getAddress().getHostAddress();
+if (!limboAuth.isRegistered("Notch")) {
+  // Externally managed: no local password is stored, so it is never locally
+  // verifiable — your ExternalPasswordProvider is always consulted for it.
+  limboAuth.provisionExternalPlayer("Notch", uuid, ip);
+}
+```
+
+Because the plugin id is unchanged (`limboauth`), this fork is a **drop-in replacement** for the
+original jar — existing configs, databases, and dependents keep working.
 
 ## See also
 
-- [LimboFilter](https://github.com/Elytrium/LimboFilter) - Most powerful bot filtering solution for Minecraft proxies. Built with [LimboAPI](https://github.com/Elytrium/LimboAPI).
-- [LimboAPI](https://github.com/Elytrium/LimboAPI) - Library for sending players to virtual servers (called limbo)
+- [LimboAPI](https://github.com/Elytrium/LimboAPI) — library by Elytrium for sending players to virtual servers (called limbo).
+- [LimboFilter](https://github.com/Elytrium/LimboFilter) — bot-filtering solution by Elytrium, built on LimboAPI.
 
-## Features of LimboAuth
+## Features (inherited from LimboAuth)
 
 - Supports [H2](https://www.h2database.com/html/main.html), [MySQL](https://www.mysql.com/about/), [PostgreSQL](https://www.postgresql.org/about/) [databases](https://en.wikipedia.org/wiki/Database);
 - [Geyser](https://wiki.geysermc.org) [Floodgate](https://wiki.geysermc.org/floodgate/) support;
@@ -53,11 +126,9 @@ Test server: [``ely.su``](https://hotmc.ru/minecraft-server-203216)
 - ***limboauth.admin.reload* | /lauth reload** - Reload Plugin Command
 - ***limboauth.admin.***\* - Gives All Admin Permissions
 
-## Donation
+## Credits & license
 
-Your donations are really appreciated. Donations wallets/links/cards:
-
-- MasterCard Debit Card (Tinkoff Bank): ``5536 9140 0599 1975``
-- Qiwi Wallet: ``PFORG`` or [this link](https://my.qiwi.com/form/Petr-YSpyiLt9c6)
-- YooMoney Wallet: ``4100 1721 8467 044`` or [this link](https://yoomoney.ru/quickpay/shop-widget?writer=seller&targets=Donation&targets-hint=&default-sum=&button-text=11&payment-type-choice=on&mobile-payment-type-choice=on&hint=&successURL=&quickpay=shop&account=410017218467044)
-- Monero (XMR): 86VQyCz68ApebfFgrzRFAuYLdvd3qG8iT9RHcru9moQkJR9W2Q89Gt3ecFQcFu6wncGwGJsMS9E8Bfr9brztBNbX7Q2rfYS
+LimboAuth was created by **Elytrium** and is licensed under **AGPL-3.0**. This fork preserves that
+license (see [`LICENSE`](LICENSE)) and documents its modifications in [`NOTICE.md`](NOTICE.md). If
+LimboAuth is useful to you, please consider supporting the original developer through the
+[upstream repository](https://github.com/Elytrium/LimboAuth).

@@ -1,1 +1,1 @@
-getRootProject().setName("limboauth")
+getRootProject().setName("pano-limbo-auth")

@@ -1,0 +1,10 @@
+# JitPack build configuration for the Pano fork of LimboAuth.
+#
+# The project targets Java 17, so build with JDK 17. The build uses the Shadow
+# and maven-publish plugins; publishToMavenLocal installs the Maven artifacts
+# (main jar + sources + javadoc) into the local repository so JitPack can serve
+# them to consumers.
+jdk:
+  - openjdk17
+install:
+  - ./gradlew build publishToMavenLocal
