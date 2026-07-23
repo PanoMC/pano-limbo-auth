@@ -43,6 +43,7 @@ import net.elytrium.limboapi.api.LimboSessionHandler;
 import net.elytrium.limboapi.api.player.LimboPlayer;
 import net.elytrium.limboauth.LimboAuth;
 import net.elytrium.limboauth.Settings;
+import net.elytrium.limboauth.api.ExternalPasswordProvider;
 import net.elytrium.limboauth.event.PostAuthorizationEvent;
 import net.elytrium.limboauth.event.PostRegisterEvent;
 import net.elytrium.limboauth.event.TaskEvent;
@@ -91,6 +92,8 @@ public class AuthSessionHandler implements LimboSessionHandler {
   private static Title loginSuccessfulTitle;
   @Nullable
   private static MigrationHash migrationHash;
+  @Nullable
+  private static ExternalPasswordProvider externalPasswordProvider;
 
   private final Dao<RegisteredPlayer, String> playerDao;
   private final Player proxyPlayer;
@@ -227,6 +230,17 @@ public class AuthSessionHandler implements LimboSessionHandler {
           this.proxyPlayer.sendMessage(registerSuccessful);
           if (registerSuccessfulTitle != null) {
             this.proxyPlayer.showTitle(registerSuccessfulTitle);
+          }
+
+          // Mirror the freshly registered account into the external provider's store, if one is
+          // installed. A provider failure must never break the local registration flow.
+          ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
+          if (provider != null) {
+            try {
+              provider.onRegister(registeredPlayer.getLowercaseNickname(), password, this.proxyPlayer.getRemoteAddress().getAddress().getHostAddress());
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
           }
 
           this.plugin.getServer().getEventManager()
@@ -526,7 +540,30 @@ public class AuthSessionHandler implements LimboSessionHandler {
     migrationHash = Settings.IMP.MAIN.MIGRATION_HASH;
   }
 
+  public static void setExternalPasswordProvider(@Nullable ExternalPasswordProvider provider) {
+    externalPasswordProvider = provider;
+  }
+
+  @Nullable
+  public static ExternalPasswordProvider getExternalPasswordProvider() {
+    return externalPasswordProvider;
+  }
+
   public static boolean checkPassword(String password, RegisteredPlayer player, Dao<RegisteredPlayer, String> playerDao) {
+    if (externalPasswordProvider != null) {
+      Boolean external = externalPasswordProvider.verifyPassword(player.getLowercaseNickname(), password);
+      if (external != null) {
+        return external;
+      }
+    }
+
+    // External-managed rows are only authenticated by the ExternalPasswordProvider; if it declined
+    // (or was absent), never fall through to local hashing. The placeholder hash is not a real
+    // BCrypt hash, so this guard closes any migration-hash plaintext bypass against it.
+    if (LimboAuth.EXTERNAL_PROVIDER_PLACEHOLDER_HASH.equals(player.getHash())) {
+      return false;
+    }
+
     String hash = player.getHash();
     boolean isCorrect = HASH_VERIFIER.verify(
         password.getBytes(StandardCharsets.UTF_8),

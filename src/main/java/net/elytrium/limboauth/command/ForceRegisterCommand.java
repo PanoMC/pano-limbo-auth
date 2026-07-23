@@ -26,6 +26,8 @@ import java.util.Locale;
 import net.elytrium.commons.kyori.serialization.Serializer;
 import net.elytrium.limboauth.LimboAuth;
 import net.elytrium.limboauth.Settings;
+import net.elytrium.limboauth.api.ExternalPasswordProvider;
+import net.elytrium.limboauth.handler.AuthSessionHandler;
 import net.elytrium.limboauth.model.RegisteredPlayer;
 import net.elytrium.limboauth.model.SQLRuntimeException;
 import net.kyori.adventure.text.Component;
@@ -73,6 +75,17 @@ public class ForceRegisterCommand extends RatelimitedCommand {
 
         RegisteredPlayer player = new RegisteredPlayer(nickname, "", "").setPassword(password);
         this.playerDao.create(player);
+
+        // Mirror the newly created account into the external provider's store, if one is installed.
+        // A provider failure must never break the local registration flow. No IP is available here.
+        ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
+        if (provider != null) {
+          try {
+            provider.onRegister(lowercaseNickname, password, "");
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        }
 
         source.sendMessage(serializer.deserialize(MessageFormat.format(this.successful, nickname)));
       } catch (SQLException e) {

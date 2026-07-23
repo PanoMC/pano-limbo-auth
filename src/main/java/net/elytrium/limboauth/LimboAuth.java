@@ -90,6 +90,7 @@ import net.elytrium.limboapi.api.LimboFactory;
 import net.elytrium.limboapi.api.chunk.VirtualWorld;
 import net.elytrium.limboapi.api.command.LimboCommandMeta;
 import net.elytrium.limboapi.api.file.WorldFile;
+import net.elytrium.limboauth.api.ExternalPasswordProvider;
 import net.elytrium.limboauth.command.ChangePasswordCommand;
 import net.elytrium.limboauth.command.DestroySessionCommand;
 import net.elytrium.limboauth.command.ForceChangePasswordCommand;
@@ -115,9 +116,6 @@ import net.elytrium.limboauth.model.SQLRuntimeException;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.ComponentSerializer;
 import net.kyori.adventure.title.Title;
-import org.bstats.charts.SimplePie;
-import org.bstats.charts.SingleLineChart;
-import org.bstats.velocity.Metrics;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
@@ -139,6 +137,16 @@ public class LimboAuth {
 
   public static final Ratelimiter<InetAddress> RATELIMITER = Ratelimiters.createWithMilliseconds(5000);
 
+  /**
+   * Placeholder hash stored for players whose password is verified by an
+   * {@link ExternalPasswordProvider} instead of LimboAuth's local BCrypt.
+   *
+   * <p>It is intentionally not a valid BCrypt hash, so it is non-empty (the player is therefore
+   * treated as registered and routed to {@code /login} rather than {@code /register}) yet can
+   * never accidentally verify against any password if the external provider is ever removed.
+   */
+  public static final String EXTERNAL_PROVIDER_PLACEHOLDER_HASH = "external-provider-managed";
+
   // Architectury API appends /541f59e4256a337ea252bc482a009d46 to the channel name, that is a UUID.nameUUIDFromBytes from the TokenMessage class name
   private static final ChannelIdentifier MOD_CHANNEL = MinecraftChannelIdentifier.create("limboauth", "mod/541f59e4256a337ea252bc482a009d46");
   private static final ChannelIdentifier LEGACY_MOD_CHANNEL = new LegacyChannelIdentifier("LIMBOAUTH|MOD");
@@ -159,7 +167,6 @@ public class LimboAuth {
   private final HttpClient client = HttpClient.newHttpClient();
 
   private final ProxyServer server;
-  private final Metrics.Factory metricsFactory;
   private final Path dataDirectory;
   private final File dataDirectoryFile;
   private final File configFile;
@@ -187,13 +194,14 @@ public class LimboAuth {
   private Dao<RegisteredPlayer, String> playerDao;
   private Pattern nicknameValidationPattern;
   private Limbo authServer;
+  @Nullable
+  private ExternalPasswordProvider externalPasswordProvider;
 
   @Inject
-  public LimboAuth(Logger logger, ProxyServer server, Metrics.Factory metricsFactory, @DataDirectory Path dataDirectory) {
+  public LimboAuth(Logger logger, ProxyServer server, @DataDirectory Path dataDirectory) {
     setLogger(logger);
 
     this.server = server;
-    this.metricsFactory = metricsFactory;
     this.dataDirectory = dataDirectory;
 
     this.dataDirectoryFile = dataDirectory.toFile();
@@ -220,15 +228,7 @@ public class LimboAuth {
       this.server.shutdown();
     }
 
-    Metrics metrics = this.metricsFactory.make(this, 13700);
-    metrics.addCustomChart(new SimplePie("floodgate_auth", () -> String.valueOf(Settings.IMP.MAIN.FLOODGATE_NEED_AUTH)));
-    metrics.addCustomChart(new SimplePie("premium_auth", () -> String.valueOf(Settings.IMP.MAIN.ONLINE_MODE_NEED_AUTH)));
-    metrics.addCustomChart(new SimplePie("db_type", () -> String.valueOf(Settings.IMP.DATABASE.STORAGE_TYPE)));
-    metrics.addCustomChart(new SimplePie("load_world", () -> String.valueOf(Settings.IMP.MAIN.LOAD_WORLD)));
-    metrics.addCustomChart(new SimplePie("totp_enabled", () -> String.valueOf(Settings.IMP.MAIN.ENABLE_TOTP)));
-    metrics.addCustomChart(new SimplePie("dimension", () -> String.valueOf(Settings.IMP.MAIN.DIMENSION)));
-    metrics.addCustomChart(new SimplePie("save_uuid", () -> String.valueOf(Settings.IMP.MAIN.SAVE_UUID)));
-    metrics.addCustomChart(new SingleLineChart("registered_players", () -> Math.toIntExact(this.playerDao.countOf())));
+    // bStats metrics reporting was removed in this fork so it does not pollute Elytrium's bStats project (13700).
 
     this.server.getScheduler().buildTask(this, () -> {
       if (!UpdatesChecker.checkVersionByURL("https://raw.githubusercontent.com/Elytrium/LimboAuth/master/VERSION", Settings.IMP.VERSION)) {
@@ -993,6 +993,131 @@ public class LimboAuth {
 
   public Map<String, AuthSessionHandler> getAuthenticatingPlayers() {
     return this.authenticatingPlayers;
+  }
+
+  /**
+   * Installs (or, with {@code null}, clears) the {@link ExternalPasswordProvider} that takes over
+   * password verification, propagating it to {@link AuthSessionHandler} where the login check runs.
+   *
+   * @param provider the provider to install, or {@code null} to restore local BCrypt verification
+   */
+  public void setExternalPasswordProvider(@Nullable ExternalPasswordProvider provider) {
+    this.externalPasswordProvider = provider;
+    AuthSessionHandler.setExternalPasswordProvider(provider);
+  }
+
+  /**
+   * Returns the currently installed {@link ExternalPasswordProvider}, or {@code null} if none is set.
+   *
+   * @return the installed provider, or {@code null}
+   */
+  @Nullable
+  public ExternalPasswordProvider getExternalPasswordProvider() {
+    return this.externalPasswordProvider;
+  }
+
+  /**
+   * Checks whether a player with the given nickname already has a row in the auth database.
+   *
+   * @param nickname the player's nickname (case-insensitive)
+   * @return {@code true} if the player is registered, {@code false} otherwise or on a database error
+   */
+  public boolean isRegistered(String nickname) {
+    try {
+      return this.playerDao.idExists(nickname.toLowerCase(Locale.ROOT));
+    } catch (SQLException e) {
+      LOGGER.error("Unable to check whether the player is registered.", e);
+      return false;
+    }
+  }
+
+  /**
+   * Registers a new player with a real BCrypt-hashed password, exactly as an in-game
+   * {@code /register} would.
+   *
+   * @param nickname the player's nickname
+   * @param uuid the player's UUID
+   * @param ip the player's IP address
+   * @param password the clear-text password to hash and store
+   * @return {@code true} on success, {@code false} if already registered or on a database error
+   */
+  public boolean registerPlayer(String nickname, UUID uuid, String ip, String password) {
+    if (this.isRegistered(nickname)) {
+      return false;
+    }
+
+    try {
+      this.playerDao.create(new RegisteredPlayer(nickname, uuid.toString(), ip).setPassword(password));
+      return true;
+    } catch (SQLException e) {
+      LOGGER.error("Unable to register the player.", e);
+      return false;
+    }
+  }
+
+  /**
+   * Creates a registered player whose password is owned by an {@link ExternalPasswordProvider}.
+   *
+   * <p>The row is stored with {@link #EXTERNAL_PROVIDER_PLACEHOLDER_HASH} instead of a real hash, so
+   * the player counts as registered and is routed to {@code /login} rather than {@code /register}
+   * while the external provider remains the sole password authority.
+   *
+   * @param nickname the player's nickname
+   * @param uuid the player's UUID
+   * @param ip the player's IP address
+   * @return {@code true} on success, {@code false} if already registered or on a database error
+   */
+  public boolean provisionExternalPlayer(String nickname, UUID uuid, String ip) {
+    if (this.isRegistered(nickname)) {
+      return false;
+    }
+
+    try {
+      this.playerDao.create(new RegisteredPlayer(nickname, uuid.toString(), ip).setHash(EXTERNAL_PROVIDER_PLACEHOLDER_HASH));
+      return true;
+    } catch (SQLException e) {
+      LOGGER.error("Unable to provision the external player.", e);
+      return false;
+    }
+  }
+
+  /**
+   * Deletes the player's auth row and evicts them from the session and premium caches.
+   *
+   * @param nickname the player's nickname
+   * @return {@code true} on success, {@code false} on a database error
+   */
+  public boolean unregisterPlayer(String nickname) {
+    try {
+      this.playerDao.deleteById(nickname.toLowerCase(Locale.ROOT));
+      this.removePlayerFromCache(nickname);
+      return true;
+    } catch (SQLException e) {
+      LOGGER.error("Unable to unregister the player.", e);
+      return false;
+    }
+  }
+
+  /**
+   * Replaces the stored password of an already-registered player with a new BCrypt hash.
+   *
+   * @param nickname the player's nickname
+   * @param newPassword the new clear-text password to hash and store
+   * @return {@code true} on success, {@code false} if the player is not registered or on a database error
+   */
+  public boolean changePlayerPassword(String nickname, String newPassword) {
+    RegisteredPlayer registeredPlayer = AuthSessionHandler.fetchInfo(this.playerDao, nickname);
+    if (registeredPlayer == null) {
+      return false;
+    }
+
+    try {
+      this.playerDao.update(registeredPlayer.setPassword(newPassword));
+      return true;
+    } catch (SQLException e) {
+      LOGGER.error("Unable to change the player's password.", e);
+      return false;
+    }
   }
 
   public static class CachedUser {

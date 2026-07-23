@@ -26,6 +26,7 @@ import java.util.Locale;
 import net.elytrium.commons.kyori.serialization.Serializer;
 import net.elytrium.limboauth.LimboAuth;
 import net.elytrium.limboauth.Settings;
+import net.elytrium.limboauth.api.ExternalPasswordProvider;
 import net.elytrium.limboauth.event.AuthUnregisterEvent;
 import net.elytrium.limboauth.handler.AuthSessionHandler;
 import net.elytrium.limboauth.model.RegisteredPlayer;
@@ -78,6 +79,18 @@ public class UnregisterCommand extends RatelimitedCommand {
               this.plugin.getServer().getEventManager().fireAndForget(new AuthUnregisterEvent(username));
               this.playerDao.deleteById(usernameLowercase);
               this.plugin.removePlayerFromCacheLowercased(usernameLowercase);
+
+              // Remove the account from the external provider's store, if one is installed.
+              // A provider failure must never break the local unregistration flow.
+              ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
+              if (provider != null) {
+                try {
+                  provider.onUnregister(usernameLowercase);
+                } catch (Exception e) {
+                  e.printStackTrace();
+                }
+              }
+
               ((Player) source).disconnect(this.successful);
             } catch (SQLException e) {
               source.sendMessage(this.errorOccurred);

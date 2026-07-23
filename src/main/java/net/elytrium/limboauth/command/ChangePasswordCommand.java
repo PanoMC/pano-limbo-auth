@@ -27,6 +27,7 @@ import java.util.Locale;
 import net.elytrium.commons.kyori.serialization.Serializer;
 import net.elytrium.limboauth.LimboAuth;
 import net.elytrium.limboauth.Settings;
+import net.elytrium.limboauth.api.ExternalPasswordProvider;
 import net.elytrium.limboauth.event.ChangePasswordEvent;
 import net.elytrium.limboauth.handler.AuthSessionHandler;
 import net.elytrium.limboauth.model.RegisteredPlayer;
@@ -99,6 +100,17 @@ public class ChangePasswordCommand extends RatelimitedCommand {
         updateBuilder.update();
 
         this.plugin.removePlayerFromCacheLowercased(usernameLowercase);
+
+        // Mirror the new password into the external provider's store, if one is installed.
+        // A provider failure must never break the local password-change flow.
+        ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
+        if (provider != null) {
+          try {
+            provider.onPasswordChanged(usernameLowercase, newPassword);
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        }
 
         this.plugin.getServer().getEventManager().fireAndForget(
             new ChangePasswordEvent(player, needOldPass ? args[0] : null, oldHash, newPassword, newHash));
