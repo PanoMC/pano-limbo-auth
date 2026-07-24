@@ -7,4 +7,7 @@
 jdk:
   - openjdk17
 install:
-  - ./gradlew build publishToMavenLocal
+  # LimboAPI, ElytriumCommons and velocity-proxy are normally served only by
+  # maven.elytrium.net; fetch them from reachable public sources first (see the script).
+  - ./scripts/fetch-deps.sh
+  - ./gradlew build publishToMavenLocal -x test
