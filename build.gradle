@@ -23,14 +23,6 @@ compileJava {
 
 repositories {
     mavenCentral()
-    // Offline-buildable deps produced by scripts/fetch-deps.sh (LimboAPI, ElytriumCommons, velocity-proxy).
-    // Lets the build work even when maven.elytrium.net is unreachable; the elytrium-repo below stays as a fallback.
-    flatDir { dirs("libs") }
-
-    maven {
-        setName("elytrium-repo")
-        setUrl("https://maven.elytrium.net/repo/")
-    }
     maven {
         setName("papermc-repo")
         setUrl("https://repo.papermc.io/repository/maven-public/")
@@ -42,16 +34,17 @@ repositories {
 }
 
 dependencies {
-    compileOnly("net.elytrium.limboapi:api:$limboapiVersion")
+    // LimboAPI, ElytriumCommons and the custom velocity-proxy build are normally served only by
+    // maven.elytrium.net. scripts/fetch-deps.sh reconstructs them from reachable public sources into
+    // libs/, and they are consumed here as plain file dependencies so the build never has to contact
+    // maven.elytrium.net. Run scripts/fetch-deps.sh before building (CI does this automatically).
+    compileOnly(fileTree("libs") {
+        include("*.jar")
+    })
     compileOnly("net.kyori:adventure-nbt:$adventureNbtVersion")
-    compileOnly("net.elytrium.commons:config:$elytriumCommonsVersion")
-    compileOnly("net.elytrium.commons:utils:$elytriumCommonsVersion")
-    compileOnly("net.elytrium.commons:velocity:$elytriumCommonsVersion")
-    compileOnly("net.elytrium.commons:kyori:$elytriumCommonsVersion")
 
     compileOnly("com.velocitypowered:velocity-api:$velocityVersion")
     annotationProcessor("com.velocitypowered:velocity-api:$velocityVersion")
-    compileOnly("com.velocitypowered:velocity-proxy:$velocityVersion") // From Elytrium Repo.
 
     // Needs for some velocity methods.
     compileOnly("io.netty:netty-codec:$nettyVersion")
