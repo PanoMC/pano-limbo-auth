@@ -23,6 +23,9 @@ compileJava {
 
 repositories {
     mavenCentral()
+    // Offline-buildable deps produced by scripts/fetch-deps.sh (LimboAPI, ElytriumCommons, velocity-proxy).
+    // Lets the build work even when maven.elytrium.net is unreachable; the elytrium-repo below stays as a fallback.
+    flatDir { dirs("libs") }
 
     maven {
         setName("elytrium-repo")
@@ -40,6 +43,7 @@ repositories {
 
 dependencies {
     compileOnly("net.elytrium.limboapi:api:$limboapiVersion")
+    compileOnly("net.kyori:adventure-nbt:$adventureNbtVersion")
     compileOnly("net.elytrium.commons:config:$elytriumCommonsVersion")
     compileOnly("net.elytrium.commons:utils:$elytriumCommonsVersion")
     compileOnly("net.elytrium.commons:velocity:$elytriumCommonsVersion")

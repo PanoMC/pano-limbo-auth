@@ -22,12 +22,17 @@ verification and manage accounts — capabilities upstream LimboAuth does not ex
   `verifyPassword(...)` may return `TRUE` (accept), `FALSE` (reject), or `null` (fall back to
   LimboAuth's own stored-password check), allowing an external authority to be the source of truth.
 - **New public `LimboAuth` methods:**
-  - `setExternalPasswordProvider(provider)` — register/clear the external password provider.
-  - `isRegistered(username)` — check whether an account exists.
-  - `registerPlayer(username, password)` — create a password-backed account.
-  - `provisionExternalPlayer(username)` — create an externally-authenticated account (no local password).
-  - `unregisterPlayer(username)` — delete an account.
-  - `changePlayerPassword(username, newPassword)` — change an existing account's password.
+  - `setExternalPasswordProvider(provider)` / `getExternalPasswordProvider()` — register/clear/read
+    the external password provider.
+  - `isRegistered(nickname)` — check whether an account exists.
+  - `registerPlayer(nickname, uuid, ip, password)` — create a password-backed account.
+  - `provisionExternalPlayer(nickname, uuid, ip)` — create an externally-authenticated account whose
+    stored hash is a non-verifiable placeholder (only the provider can authenticate it).
+  - `unregisterPlayer(nickname)` — delete an account and evict it from the session cache.
+  - `changePlayerPassword(nickname, newPassword)` — change an existing account's password.
+
+  The verify hook additionally short-circuits placeholder (externally-managed) rows so they can never
+  be authenticated by LimboAuth's own local hash check.
 
 The plugin id remains `limboauth`, so the fork stays a drop-in replacement for the original.
 
@@ -41,5 +46,15 @@ The plugin id remains `limboauth`, so the fork stays a drop-in replacement for t
   `elytrium-repo` Maven publishing repository in `build.gradle`. Removed the upstream bStats
   (project `13700`) and Modrinth badges from the README.
 - Added `jitpack.yml` so the fork can be built and consumed via JitPack.
+
+### Reproducible / offline build
+
+Upstream LimboAuth resolves LimboAPI, ElytriumCommons and a custom `velocity-proxy` build only from
+`maven.elytrium.net`, so its build breaks whenever that host is unreachable. `scripts/fetch-deps.sh`
+reconstructs those three dependency sets from reachable public sources (the LimboAPI GitHub release
+asset, ElytriumCommons built from source, and the Velocity proxy jar from PaperMC's download API) into
+a git-ignored `libs/` directory that `build.gradle` consumes via `flatDir`. `maven.elytrium.net`
+remains declared as a fallback, so nothing changes when it is up. All three are still their original
+projects under their original licenses; they are fetched, not re-published.
 
 No copyright headers, license text, or original authorship attribution have been removed or altered.
