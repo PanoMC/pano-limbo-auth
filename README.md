@@ -18,7 +18,7 @@ Upstream LimboAuth has no supported way to:
   system), or
 - **create, update, or remove accounts** from another plugin through a stable public API.
 
-[Pano](https://panocms.com) needs both so a Minecraft server can authenticate players against its
+[Pano](https://panomc.com) needs both so a Minecraft server can authenticate players against its
 website accounts — the same way plugins integrate with AuthMe-Reloaded on Spigot. The additions are
 generic and reusable by **any** Velocity plugin, not just Pano.
 

@@ -12,7 +12,7 @@ is preserved unchanged (see [`LICENSE`](LICENSE)) along with the original per-fi
 
 ## Modifications made in this fork
 
-Maintained by the [Pano](https://panocms.com) project (github.com/PanoMC/pano-limbo-auth). The
+Maintained by the [Pano](https://panomc.com) project (github.com/PanoMC/pano-limbo-auth). The
 functional change is a public integration API that lets external plugins delegate password
 verification and manage accounts — capabilities upstream LimboAuth does not expose.
 
