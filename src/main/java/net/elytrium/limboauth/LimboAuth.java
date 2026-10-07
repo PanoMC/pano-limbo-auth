@@ -54,6 +54,9 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.whitfin.siphash.SipHasher;
 import java.io.File;
 import java.io.IOException;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -136,6 +139,34 @@ import org.slf4j.Logger;
 public class LimboAuth {
 
   public static final Ratelimiter<InetAddress> RATELIMITER = Ratelimiters.createWithMilliseconds(5000);
+
+  private static final MethodHandle RATELIMITER_ATTEMPT = resolveRatelimiterAttempt();
+
+  private static MethodHandle resolveRatelimiterAttempt() {
+    // Velocity 3.4+ has the generic Ratelimiter.attempt(Object), 3.3.x only attempt(InetAddress).
+    MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+    try {
+      return lookup.findVirtual(Ratelimiter.class, "attempt", MethodType.methodType(boolean.class, Object.class))
+          .asType(MethodType.methodType(boolean.class, Ratelimiter.class, InetAddress.class));
+    } catch (ReflectiveOperationException ignored) {
+      try {
+        return lookup.findVirtual(Ratelimiter.class, "attempt", MethodType.methodType(boolean.class, InetAddress.class));
+      } catch (ReflectiveOperationException e) {
+        throw new ExceptionInInitializerError(e);
+      }
+    }
+  }
+
+  /**
+   * Version-tolerant {@link Ratelimiter#attempt}, works on Velocity 3.3.x and 3.4+.
+   */
+  public static boolean attemptRatelimit(InetAddress address) {
+    try {
+      return (boolean) RATELIMITER_ATTEMPT.invokeExact(RATELIMITER, address);
+    } catch (Throwable e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Placeholder hash stored for players whose password is verified by an

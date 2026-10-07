@@ -50,6 +50,18 @@ A callback interface you register to take over password checks:
 - **`changePlayerPassword(String nickname, String newPassword)`** — set a new password for an
   existing account.
 
+## Supported versions
+
+Tested 2026-10-07 (the build is compiled against Velocity 3.4.0-SNAPSHOT, but the proxy rate limiter call is resolved at startup, so it also runs on 3.3.x):
+
+| Pano LimboAuth | LimboAPI | Velocity | Java | Result |
+| --- | --- | --- | --- | --- |
+| 1.1.14 (this fork, with rate limiter shim) | 1.1.26 | 3.3.0-SNAPSHOT build 436 (protocol up to 767, MC 1.21.1) | 21 | works: pre-login, `/register`, `/login` |
+| any build | 1.1.26 | 3.4.0 builds 442 and newer | 21 | not supported: LimboAPI 1.1.26 itself fails to load (`ConnectedPlayer.<init>`, or "supports 767 but Velocity is 768+") |
+| any build | LimboAPI `dev-build` (rolling, Java 25) | Velocity with protocol >= 777 | 25 | not tested here |
+
+LimboAPI 1.1.26 (2024-09) is the newest LimboAPI release; until a LimboAPI release supports newer Velocity, run Velocity 3.3.0-SNAPSHOT build 436 (or older 3.3.0 builds) with LimboAPI 1.1.26.
+
 ## How to use
 
 Grab the running LimboAuth plugin instance from Velocity's `PluginManager`, then register your
