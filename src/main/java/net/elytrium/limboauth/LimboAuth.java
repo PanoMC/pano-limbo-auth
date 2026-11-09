@@ -998,6 +998,10 @@ public class LimboAuth {
     SERIALIZER = serializer;
   }
 
+  public static Logger getLogger() {
+    return LOGGER;
+  }
+
   public static Serializer getSerializer() {
     return SERIALIZER;
   }

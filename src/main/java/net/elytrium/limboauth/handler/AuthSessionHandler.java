@@ -550,8 +550,19 @@ public class AuthSessionHandler implements LimboSessionHandler {
   }
 
   public static boolean checkPassword(String password, RegisteredPlayer player, Dao<RegisteredPlayer, String> playerDao) {
-    if (externalPasswordProvider != null) {
-      Boolean external = externalPasswordProvider.verifyPassword(player.getLowercaseNickname(), password);
+    ExternalPasswordProvider provider = externalPasswordProvider;
+    if (provider != null) {
+      Boolean external;
+      try {
+        external = provider.verifyPassword(player.getLowercaseNickname(), password);
+      } catch (Exception e) {
+        // A provider that cannot answer (unreachable, timed out) rejects the attempt, which is then
+        // counted like any wrong password. Falling back to the local hash here would make every
+        // outage of the external store a way around it.
+        LimboAuth.getLogger().warn("The external password provider failed: {}", e.toString());
+        return false;
+      }
+
       if (external != null) {
         return external;
       }
