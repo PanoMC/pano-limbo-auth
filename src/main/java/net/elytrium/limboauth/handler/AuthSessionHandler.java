@@ -34,8 +34,14 @@ import java.text.MessageFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import net.elytrium.commons.kyori.serialization.Serializer;
 import net.elytrium.limboapi.api.Limbo;
@@ -96,6 +102,16 @@ public class AuthSessionHandler implements LimboSessionHandler {
   private static ExternalPasswordProvider externalPasswordProvider;
   private static Component externalRegisterRefusedKick;
 
+  private static final int EXTERNAL_THREADS = 8;
+  private static final int EXTERNAL_QUEUE = 64;
+
+  /**
+   * Where {@link ExternalPasswordProvider} calls run: never on a connection's event loop, which other
+   * players share. Bounded in threads and queue, so a flood of attempts against a slow provider is
+   * refused instead of piling up.
+   */
+  private static final ThreadPoolExecutor EXTERNAL_EXECUTOR = createExternalExecutor();
+
   private final Dao<RegisteredPlayer, String> playerDao;
   private final Player proxyPlayer;
   private final LimboAuth plugin;
@@ -119,6 +135,9 @@ public class AuthSessionHandler implements LimboSessionHandler {
   private boolean totpState;
   private String tempPassword;
   private boolean tokenReceived;
+  // Set while an external provider call for this player is running; further attempts are ignored
+  // until it has answered. Only touched on this player's own executor.
+  private boolean externalCheckInFlight;
 
   public AuthSessionHandler(Dao<RegisteredPlayer, String> playerDao, Player proxyPlayer, LimboAuth plugin, @Nullable RegisteredPlayer playerInfo) {
     this.playerDao = playerDao;
@@ -219,44 +238,29 @@ public class AuthSessionHandler implements LimboSessionHandler {
         if (this.checkPasswordsRepeat(args) && this.checkPasswordLength(password) && this.checkPasswordStrength(password)) {
           this.saveTempPassword(password);
 
-          // With an external provider the external store is the authority: it registers the
-          // account first, and only an account it accepted is created here - as a provider-managed
-          // row without a local password, so it has no second credential that would work while
-          // the provider is unreachable. A provider that throws refused it (name taken there, or
-          // unreachable), and nothing is written.
           ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
-          RegisteredPlayer registeredPlayer;
           if (provider == null) {
-            registeredPlayer = new RegisteredPlayer(this.proxyPlayer).setPassword(password);
-          } else {
-            try {
-              provider.onRegister(this.proxyPlayer.getUsername().toLowerCase(Locale.ROOT), password,
-                  this.proxyPlayer.getRemoteAddress().getAddress().getHostAddress());
-            } catch (Exception e) {
-              LimboAuth.getLogger().warn("The external password provider refused a registration: {}", e.toString());
-              this.proxyPlayer.disconnect(externalRegisterRefusedKick);
-              return;
-            }
+            this.completeRegistration(new RegisteredPlayer(this.proxyPlayer).setPassword(password));
+          } else if (!this.externalCheckInFlight) {
+            // The external store is the authority: it registers the account first, off the
+            // connection's event loop, and only an account it accepted is created here - as a
+            // provider-managed row without a local password, so it has no second credential that
+            // would work while the provider is unreachable. A provider that throws refused it
+            // (name taken there, or unreachable), and nothing is written.
+            String lowercaseNickname = this.proxyPlayer.getUsername().toLowerCase(Locale.ROOT);
+            String ip = this.proxyPlayer.getRemoteAddress().getAddress().getHostAddress();
 
-            registeredPlayer = new RegisteredPlayer(this.proxyPlayer).setHash(LimboAuth.EXTERNAL_PROVIDER_PLACEHOLDER_HASH);
+            this.runExternal(() -> {
+              provider.onRegister(lowercaseNickname, password, ip);
+              return true;
+            }, accepted -> {
+              if (accepted) {
+                this.completeRegistration(new RegisteredPlayer(this.proxyPlayer).setHash(LimboAuth.EXTERNAL_PROVIDER_PLACEHOLDER_HASH));
+              } else {
+                this.proxyPlayer.disconnect(externalRegisterRefusedKick);
+              }
+            });
           }
-
-          try {
-            this.playerDao.create(registeredPlayer);
-            this.playerInfo = registeredPlayer;
-          } catch (SQLException e) {
-            this.proxyPlayer.disconnect(databaseErrorKick);
-            throw new SQLRuntimeException(e);
-          }
-
-          this.proxyPlayer.sendMessage(registerSuccessful);
-          if (registerSuccessfulTitle != null) {
-            this.proxyPlayer.showTitle(registerSuccessfulTitle);
-          }
-
-          this.plugin.getServer().getEventManager()
-              .fire(new PostRegisterEvent(this::finishAuth, this.player, this.playerInfo, this.tempPassword))
-              .thenAcceptAsync(this::finishAuth);
         }
 
         // {@code return} placed here (not above), because
@@ -268,18 +272,15 @@ public class AuthSessionHandler implements LimboSessionHandler {
         String password = args[1];
         this.saveTempPassword(password);
 
-        if (password.length() > 0 && checkPassword(password, this.playerInfo, this.playerDao)) {
-          if (this.playerInfo.getTotpToken().isEmpty()) {
-            this.finishLogin();
-          } else {
-            this.totpState = true;
-            this.sendMessage(true);
-          }
-        } else if (--this.attempts != 0) {
-          this.proxyPlayer.sendMessage(loginWrongPassword[this.attempts - 1]);
-          this.checkBruteforceAttempts();
-        } else {
-          this.proxyPlayer.disconnect(loginWrongPasswordKick);
+        if (password.length() == 0) {
+          this.completeLogin(false);
+        } else if (externalPasswordProvider == null) {
+          this.completeLogin(checkPassword(password, this.playerInfo, this.playerDao));
+        } else if (!this.externalCheckInFlight) {
+          // The provider can take a network round trip; it must not hold the connection's event
+          // loop (shared with other players) while it does. One check per player at a time.
+          RegisteredPlayer info = this.playerInfo;
+          this.runExternal(() -> checkPassword(password, info, this.playerDao), this::completeLogin);
         }
 
         return;
@@ -352,6 +353,94 @@ public class AuthSessionHandler implements LimboSessionHandler {
         this.finishAuth();
       }
     }
+  }
+
+  private void completeRegistration(RegisteredPlayer registeredPlayer) {
+    try {
+      this.playerDao.create(registeredPlayer);
+      this.playerInfo = registeredPlayer;
+    } catch (SQLException e) {
+      this.proxyPlayer.disconnect(databaseErrorKick);
+      throw new SQLRuntimeException(e);
+    }
+
+    this.proxyPlayer.sendMessage(registerSuccessful);
+    if (registerSuccessfulTitle != null) {
+      this.proxyPlayer.showTitle(registerSuccessfulTitle);
+    }
+
+    this.plugin.getServer().getEventManager()
+        .fire(new PostRegisterEvent(this::finishAuth, this.player, this.playerInfo, this.tempPassword))
+        .thenAcceptAsync(this::finishAuth);
+  }
+
+  private void completeLogin(boolean correct) {
+    if (correct) {
+      if (this.playerInfo.getTotpToken().isEmpty()) {
+        this.finishLogin();
+      } else {
+        this.totpState = true;
+        this.sendMessage(true);
+      }
+    } else if (--this.attempts != 0) {
+      this.proxyPlayer.sendMessage(loginWrongPassword[this.attempts - 1]);
+      this.checkBruteforceAttempts();
+    } else {
+      this.proxyPlayer.disconnect(loginWrongPasswordKick);
+    }
+  }
+
+  /**
+   * Runs an {@link ExternalPasswordProvider} call on {@link #EXTERNAL_EXECUTOR} and hands its result
+   * back to this player's own executor, where the rest of this handler runs. A call that throws,
+   * or that cannot be queued because too many are already waiting, counts as {@code false}.
+   */
+  private void runExternal(Callable<Boolean> call, Consumer<Boolean> then) {
+    this.externalCheckInFlight = true;
+
+    try {
+      EXTERNAL_EXECUTOR.execute(() -> {
+        boolean result = callExternal(call);
+
+        this.player.getScheduledExecutor().execute(() -> {
+          this.externalCheckInFlight = false;
+
+          if (this.proxyPlayer.isActive()) {
+            then.accept(result);
+          }
+        });
+      });
+    } catch (RejectedExecutionException e) {
+      this.externalCheckInFlight = false;
+      then.accept(false);
+    }
+  }
+
+  private static boolean callExternal(Callable<Boolean> call) {
+    try {
+      return Boolean.TRUE.equals(call.call());
+    } catch (Exception e) {
+      LimboAuth.getLogger().warn("The external password provider failed: {}", e.toString());
+      return false;
+    }
+  }
+
+  private static ThreadPoolExecutor createExternalExecutor() {
+    AtomicInteger counter = new AtomicInteger();
+    ThreadPoolExecutor executor = new ThreadPoolExecutor(
+        EXTERNAL_THREADS,
+        EXTERNAL_THREADS,
+        60L,
+        TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(EXTERNAL_QUEUE),
+        runnable -> {
+          Thread thread = new Thread(runnable, "limboauth-external-" + counter.incrementAndGet());
+          thread.setDaemon(true);
+          return thread;
+        }
+    );
+    executor.allowCoreThreadTimeOut(true);
+    return executor;
   }
 
   private void checkBruteforceAttempts() {
