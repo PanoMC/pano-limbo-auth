@@ -390,6 +390,8 @@ public class Settings extends YamlConfig {
       public String ERROR_OCCURRED = "{PRFX} &cAn internal error has occurred!";
       public String RATELIMITED = "{PRFX} &cPlease wait before next usage!";
       public String DATABASE_ERROR_KICK = "{PRFX} &cA database error has occurred!";
+      public String EXTERNAL_REGISTER_REFUSED_KICK = "{PRFX}{NL}&cThis nickname can't be registered right now.{NL}&7If it is your account, rejoin and log in. Otherwise try again later.";
+      public String EXTERNAL_CHANGE_REFUSED = "{PRFX} &cYour password could not be changed right now, please try again later.";
 
       public String NOT_PLAYER = "{PRFX} &cСonsole is not allowed to execute this command!";
       public String NOT_REGISTERED = "{PRFX} &cYou are not registered or your account is &6PREMIUM!";

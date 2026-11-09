@@ -27,7 +27,6 @@ import java.util.Locale;
 import net.elytrium.commons.kyori.serialization.Serializer;
 import net.elytrium.limboauth.LimboAuth;
 import net.elytrium.limboauth.Settings;
-import net.elytrium.limboauth.api.ExternalPasswordProvider;
 import net.elytrium.limboauth.event.ChangePasswordEvent;
 import net.elytrium.limboauth.handler.AuthSessionHandler;
 import net.elytrium.limboauth.model.RegisteredPlayer;
@@ -44,6 +43,7 @@ public class ChangePasswordCommand extends RatelimitedCommand {
   private final Component wrongPassword;
   private final Component successful;
   private final Component errorOccurred;
+  private final Component externalRefused;
   private final Component usage;
   private final Component notPlayer;
 
@@ -57,6 +57,7 @@ public class ChangePasswordCommand extends RatelimitedCommand {
     this.wrongPassword = serializer.deserialize(Settings.IMP.MAIN.STRINGS.WRONG_PASSWORD);
     this.successful = serializer.deserialize(Settings.IMP.MAIN.STRINGS.CHANGE_PASSWORD_SUCCESSFUL);
     this.errorOccurred = serializer.deserialize(Settings.IMP.MAIN.STRINGS.ERROR_OCCURRED);
+    this.externalRefused = serializer.deserialize(Settings.IMP.MAIN.STRINGS.EXTERNAL_CHANGE_REFUSED);
     this.usage = serializer.deserialize(Settings.IMP.MAIN.STRINGS.CHANGE_PASSWORD_USAGE);
     this.notPlayer = serializer.deserialize(Settings.IMP.MAIN.STRINGS.NOT_PLAYER);
   }
@@ -92,7 +93,13 @@ public class ChangePasswordCommand extends RatelimitedCommand {
       try {
         final String oldHash = player.getHash();
         final String newPassword = needOldPass ? args[1] : args[0];
-        final String newHash = RegisteredPlayer.genHash(newPassword);
+        final String newHash;
+        try {
+          newHash = AuthSessionHandler.hashForPasswordChange(usernameLowercase, newPassword);
+        } catch (AuthSessionHandler.ExternalProviderRefusedException e) {
+          source.sendMessage(this.externalRefused);
+          return;
+        }
 
         UpdateBuilder<RegisteredPlayer, String> updateBuilder = this.playerDao.updateBuilder();
         updateBuilder.where().eq(RegisteredPlayer.LOWERCASE_NICKNAME_FIELD, usernameLowercase);
@@ -100,17 +107,6 @@ public class ChangePasswordCommand extends RatelimitedCommand {
         updateBuilder.update();
 
         this.plugin.removePlayerFromCacheLowercased(usernameLowercase);
-
-        // Mirror the new password into the external provider's store, if one is installed.
-        // A provider failure must never break the local password-change flow.
-        ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
-        if (provider != null) {
-          try {
-            provider.onPasswordChanged(usernameLowercase, newPassword);
-          } catch (Exception e) {
-            e.printStackTrace();
-          }
-        }
 
         this.plugin.getServer().getEventManager().fireAndForget(
             new ChangePasswordEvent(player, needOldPass ? args[0] : null, oldHash, newPassword, newHash));

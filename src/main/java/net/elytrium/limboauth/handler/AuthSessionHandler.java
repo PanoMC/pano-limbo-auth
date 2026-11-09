@@ -94,6 +94,7 @@ public class AuthSessionHandler implements LimboSessionHandler {
   private static MigrationHash migrationHash;
   @Nullable
   private static ExternalPasswordProvider externalPasswordProvider;
+  private static Component externalRegisterRefusedKick;
 
   private final Dao<RegisteredPlayer, String> playerDao;
   private final Player proxyPlayer;
@@ -217,7 +218,28 @@ public class AuthSessionHandler implements LimboSessionHandler {
         String password = args[1];
         if (this.checkPasswordsRepeat(args) && this.checkPasswordLength(password) && this.checkPasswordStrength(password)) {
           this.saveTempPassword(password);
-          RegisteredPlayer registeredPlayer = new RegisteredPlayer(this.proxyPlayer).setPassword(password);
+
+          // With an external provider the external store is the authority: it registers the
+          // account first, and only an account it accepted is created here - as a provider-managed
+          // row without a local password, so it has no second credential that would work while
+          // the provider is unreachable. A provider that throws refused it (name taken there, or
+          // unreachable), and nothing is written.
+          ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
+          RegisteredPlayer registeredPlayer;
+          if (provider == null) {
+            registeredPlayer = new RegisteredPlayer(this.proxyPlayer).setPassword(password);
+          } else {
+            try {
+              provider.onRegister(this.proxyPlayer.getUsername().toLowerCase(Locale.ROOT), password,
+                  this.proxyPlayer.getRemoteAddress().getAddress().getHostAddress());
+            } catch (Exception e) {
+              LimboAuth.getLogger().warn("The external password provider refused a registration: {}", e.toString());
+              this.proxyPlayer.disconnect(externalRegisterRefusedKick);
+              return;
+            }
+
+            registeredPlayer = new RegisteredPlayer(this.proxyPlayer).setHash(LimboAuth.EXTERNAL_PROVIDER_PLACEHOLDER_HASH);
+          }
 
           try {
             this.playerDao.create(registeredPlayer);
@@ -230,17 +252,6 @@ public class AuthSessionHandler implements LimboSessionHandler {
           this.proxyPlayer.sendMessage(registerSuccessful);
           if (registerSuccessfulTitle != null) {
             this.proxyPlayer.showTitle(registerSuccessfulTitle);
-          }
-
-          // Mirror the freshly registered account into the external provider's store, if one is
-          // installed. A provider failure must never break the local registration flow.
-          ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
-          if (provider != null) {
-            try {
-              provider.onRegister(registeredPlayer.getLowercaseNickname(), password, this.proxyPlayer.getRemoteAddress().getAddress().getHostAddress());
-            } catch (Exception e) {
-              e.printStackTrace();
-            }
           }
 
           this.plugin.getServer().getEventManager()
@@ -470,6 +481,7 @@ public class AuthSessionHandler implements LimboSessionHandler {
     bossbarOverlay = Settings.IMP.MAIN.BOSSBAR_OVERLAY;
     ipLimitKick = serializer.deserialize(Settings.IMP.MAIN.STRINGS.IP_LIMIT_KICK);
     databaseErrorKick = serializer.deserialize(Settings.IMP.MAIN.STRINGS.DATABASE_ERROR_KICK);
+    externalRegisterRefusedKick = serializer.deserialize(Settings.IMP.MAIN.STRINGS.EXTERNAL_REGISTER_REFUSED_KICK);
     wrongNicknameCaseKick = Settings.IMP.MAIN.STRINGS.WRONG_NICKNAME_CASE_KICK;
     timesUp = serializer.deserialize(Settings.IMP.MAIN.STRINGS.TIMES_UP);
     registerSuccessful = serializer.deserialize(Settings.IMP.MAIN.STRINGS.REGISTER_SUCCESSFUL);
@@ -547,6 +559,41 @@ public class AuthSessionHandler implements LimboSessionHandler {
   @Nullable
   public static ExternalPasswordProvider getExternalPasswordProvider() {
     return externalPasswordProvider;
+  }
+
+  /**
+   * The hash to store for a password change of {@code lowercaseNickname} to {@code newPassword}.
+   *
+   * <p>Without an {@link ExternalPasswordProvider} this is the usual local hash. With one, the
+   * external store is changed first, and the row keeps (or becomes) a provider-managed row with no
+   * local password, so a password that the external store later replaces never keeps working
+   * locally while the provider is unreachable.
+   *
+   * @throws ExternalProviderRefusedException when the provider threw: it refused the change or could
+   *     not be reached. Nothing may be written locally then.
+   */
+  public static String hashForPasswordChange(String lowercaseNickname, String newPassword) throws ExternalProviderRefusedException {
+    ExternalPasswordProvider provider = externalPasswordProvider;
+    if (provider == null) {
+      return RegisteredPlayer.genHash(newPassword);
+    }
+
+    try {
+      provider.onPasswordChanged(lowercaseNickname, newPassword);
+    } catch (Exception e) {
+      LimboAuth.getLogger().warn("The external password provider refused a password change: {}", e.toString());
+      throw new ExternalProviderRefusedException(e);
+    }
+
+    return LimboAuth.EXTERNAL_PROVIDER_PLACEHOLDER_HASH;
+  }
+
+  /** The external password provider refused a change or could not be reached. */
+  public static class ExternalProviderRefusedException extends Exception {
+
+    public ExternalProviderRefusedException(Throwable cause) {
+      super(cause);
+    }
   }
 
   public static boolean checkPassword(String password, RegisteredPlayer player, Dao<RegisteredPlayer, String> playerDao) {

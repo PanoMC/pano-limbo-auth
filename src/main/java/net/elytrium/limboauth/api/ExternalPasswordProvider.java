@@ -44,6 +44,9 @@ public interface ExternalPasswordProvider {
    * then falls back to verifying the password against its own local BCrypt hash. Returning a
    * non-null value takes full ownership of the decision and skips that fallback entirely.
    *
+   * <p>Throwing means the provider could not answer; the attempt is rejected and counted as a wrong
+   * password, without falling back to the local hash.
+   *
    * @param lowercaseNickname the player's nickname, already lower-cased with {@link java.util.Locale#ROOT}
    * @param password the clear-text password the player supplied
    * @return {@link Boolean#TRUE} to accept the login, {@link Boolean#FALSE} to reject it, or
@@ -57,6 +60,11 @@ public interface ExternalPasswordProvider {
    * <p>The default implementation does nothing; an external provider may override it to mirror the
    * newly created account into its own store.
    *
+   * <p>Called before anything is written locally. Throwing refuses the registration (for example
+   * because the name is already taken in the external store, or the store is unreachable), and
+   * LimboAuth then creates no account. An accepted account is stored without a local password, so
+   * only this provider can authenticate it.
+   *
    * @param lowercaseNickname the player's nickname, already lower-cased with {@link java.util.Locale#ROOT}
    * @param password the clear-text password chosen at registration
    * @param ip the player's IP address at registration time
@@ -69,6 +77,9 @@ public interface ExternalPasswordProvider {
    *
    * <p>The default implementation does nothing; an external provider may override it to mirror the
    * new password into its own store.
+   *
+   * <p>Called before anything is written locally. Throwing refuses the change, and the stored
+   * credentials stay as they were. After an accepted change the account has no local password.
    *
    * @param lowercaseNickname the player's nickname, already lower-cased with {@link java.util.Locale#ROOT}
    * @param newPassword the new clear-text password

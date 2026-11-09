@@ -73,19 +73,26 @@ public class ForceRegisterCommand extends RatelimitedCommand {
           return;
         }
 
-        RegisteredPlayer player = new RegisteredPlayer(nickname, "", "").setPassword(password);
-        this.playerDao.create(player);
-
-        // Mirror the newly created account into the external provider's store, if one is installed.
-        // A provider failure must never break the local registration flow. No IP is available here.
+        // With an external provider, the account is created there first (no IP is available
+        // here) and stored locally as provider-managed, without a local password. A provider that
+        // throws refused it, and nothing is written.
         ExternalPasswordProvider provider = AuthSessionHandler.getExternalPasswordProvider();
-        if (provider != null) {
+        RegisteredPlayer player;
+        if (provider == null) {
+          player = new RegisteredPlayer(nickname, "", "").setPassword(password);
+        } else {
           try {
             provider.onRegister(lowercaseNickname, password, "");
           } catch (Exception e) {
-            e.printStackTrace();
+            LimboAuth.getLogger().warn("The external password provider refused a registration: {}", e.toString());
+            source.sendMessage(serializer.deserialize(MessageFormat.format(this.notSuccessful, nickname)));
+            return;
           }
+
+          player = new RegisteredPlayer(nickname, "", "").setHash(LimboAuth.EXTERNAL_PROVIDER_PLACEHOLDER_HASH);
         }
+
+        this.playerDao.create(player);
 
         source.sendMessage(serializer.deserialize(MessageFormat.format(this.successful, nickname)));
       } catch (SQLException e) {
